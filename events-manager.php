@@ -1,12 +1,13 @@
 <?php
 /**
- * Plugin Name: Events Manager
- * Description: Adds an event post type and an AJAX-powered upcoming events list.
- * Version: 1.0.0
+ * Plugin Name: Events Manager (Test Task)
+ * Description: Тестовый плагин со списком событий, AJAX-подгрузкой и картой.
+ * Version: 1.1.0
  * Author: ozzy1986
  * Requires at least: 6.9
  * Requires PHP: 8.1
  * Text Domain: events-manager
+ * Update URI: https://github.com/ozzy1986/wordpress-events-manager-test
  */
 
 if (! defined('ABSPATH')) {
@@ -16,6 +17,8 @@ if (! defined('ABSPATH')) {
 const EM_POST_TYPE = 'event';
 const EM_EVENT_DATE_META_KEY = 'event_date';
 const EM_EVENT_PLACE_META_KEY = 'event_place';
+const EM_EVENT_LATITUDE_META_KEY = 'event_latitude';
+const EM_EVENT_LONGITUDE_META_KEY = 'event_longitude';
 const EM_EVENTS_PER_PAGE = 3;
 const EM_AJAX_ACTION = 'em_load_events';
 const EM_AJAX_NONCE_ACTION = 'em_load_events';
@@ -43,17 +46,17 @@ function em_deactivate_plugin() {
 
 function em_register_event_post_type() {
 	$labels = array(
-		'name'               => __('Events', 'events-manager'),
-		'singular_name'      => __('Event', 'events-manager'),
-		'add_new'            => __('Add Event', 'events-manager'),
-		'add_new_item'       => __('Add New Event', 'events-manager'),
-		'edit_item'          => __('Edit Event', 'events-manager'),
-		'new_item'           => __('New Event', 'events-manager'),
-		'view_item'          => __('View Event', 'events-manager'),
-		'search_items'       => __('Search Events', 'events-manager'),
-		'not_found'          => __('No events found.', 'events-manager'),
-		'not_found_in_trash' => __('No events found in Trash.', 'events-manager'),
-		'menu_name'          => __('Events', 'events-manager'),
+		'name'               => __('События', 'events-manager'),
+		'singular_name'      => __('Событие', 'events-manager'),
+		'add_new'            => __('Добавить', 'events-manager'),
+		'add_new_item'       => __('Добавить событие', 'events-manager'),
+		'edit_item'          => __('Редактировать событие', 'events-manager'),
+		'new_item'           => __('Новое событие', 'events-manager'),
+		'view_item'          => __('Посмотреть событие', 'events-manager'),
+		'search_items'       => __('Искать события', 'events-manager'),
+		'not_found'          => __('События не найдены.', 'events-manager'),
+		'not_found_in_trash' => __('В корзине событий нет.', 'events-manager'),
+		'menu_name'          => __('События', 'events-manager'),
 	);
 
 	$args = array(
@@ -103,6 +106,30 @@ function em_register_event_meta() {
 			)
 		)
 	);
+
+	register_post_meta(
+		EM_POST_TYPE,
+		EM_EVENT_LATITUDE_META_KEY,
+		array_merge(
+			$common_args,
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => 'em_sanitize_event_latitude',
+			)
+		)
+	);
+
+	register_post_meta(
+		EM_POST_TYPE,
+		EM_EVENT_LONGITUDE_META_KEY,
+		array_merge(
+			$common_args,
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => 'em_sanitize_event_longitude',
+			)
+		)
+	);
 }
 
 function em_authorize_event_meta($allowed, $meta_key, $post_id, $user_id, $cap = '', $caps = array()) {
@@ -112,7 +139,7 @@ function em_authorize_event_meta($allowed, $meta_key, $post_id, $user_id, $cap =
 function em_add_event_meta_box() {
 	add_meta_box(
 		'em-event-details',
-		__('Event Details', 'events-manager'),
+		__('Параметры события', 'events-manager'),
 		'em_render_event_meta_box',
 		EM_POST_TYPE,
 		'normal',
@@ -121,13 +148,15 @@ function em_add_event_meta_box() {
 }
 
 function em_render_event_meta_box($post) {
-	$event_date  = get_post_meta($post->ID, EM_EVENT_DATE_META_KEY, true);
-	$event_place = get_post_meta($post->ID, EM_EVENT_PLACE_META_KEY, true);
+	$event_date      = get_post_meta($post->ID, EM_EVENT_DATE_META_KEY, true);
+	$event_place     = get_post_meta($post->ID, EM_EVENT_PLACE_META_KEY, true);
+	$event_latitude  = get_post_meta($post->ID, EM_EVENT_LATITUDE_META_KEY, true);
+	$event_longitude = get_post_meta($post->ID, EM_EVENT_LONGITUDE_META_KEY, true);
 
 	wp_nonce_field('em_save_event_meta', 'em_event_meta_nonce');
 	?>
 	<p>
-		<label for="em-event-date"><strong><?php esc_html_e('Event date', 'events-manager'); ?></strong></label>
+		<label for="em-event-date"><strong><?php esc_html_e('Дата события', 'events-manager'); ?></strong></label>
 		<br>
 		<input
 			type="date"
@@ -137,7 +166,7 @@ function em_render_event_meta_box($post) {
 		>
 	</p>
 	<p>
-		<label for="em-event-place"><strong><?php esc_html_e('Event place', 'events-manager'); ?></strong></label>
+		<label for="em-event-place"><strong><?php esc_html_e('Место проведения', 'events-manager'); ?></strong></label>
 		<br>
 		<input
 			type="text"
@@ -146,6 +175,35 @@ function em_render_event_meta_box($post) {
 			value="<?php echo esc_attr($event_place); ?>"
 			class="widefat"
 		>
+	</p>
+	<p>
+		<label for="em-event-latitude"><strong><?php esc_html_e('Широта', 'events-manager'); ?></strong></label>
+		<br>
+		<input
+			type="text"
+			id="em-event-latitude"
+			name="em_event_latitude"
+			value="<?php echo esc_attr($event_latitude); ?>"
+			class="widefat"
+			placeholder="55.7558"
+			inputmode="decimal"
+		>
+	</p>
+	<p>
+		<label for="em-event-longitude"><strong><?php esc_html_e('Долгота', 'events-manager'); ?></strong></label>
+		<br>
+		<input
+			type="text"
+			id="em-event-longitude"
+			name="em_event_longitude"
+			value="<?php echo esc_attr($event_longitude); ?>"
+			class="widefat"
+			placeholder="37.6176"
+			inputmode="decimal"
+		>
+	</p>
+	<p class="description">
+		<?php esc_html_e('Координаты необязательны. Если они заполнены, карта строится по ним, а не по текстовому адресу.', 'events-manager'); ?>
 	</p>
 	<?php
 }
@@ -197,6 +255,30 @@ function em_save_event_meta($post_id, $post) {
 	} else {
 		delete_post_meta($post_id, EM_EVENT_PLACE_META_KEY);
 	}
+
+	$event_latitude = '';
+
+	if (isset($_POST['em_event_latitude'])) {
+		$event_latitude = em_sanitize_event_latitude(wp_unslash($_POST['em_event_latitude']));
+	}
+
+	if ('' !== $event_latitude) {
+		update_post_meta($post_id, EM_EVENT_LATITUDE_META_KEY, $event_latitude);
+	} else {
+		delete_post_meta($post_id, EM_EVENT_LATITUDE_META_KEY);
+	}
+
+	$event_longitude = '';
+
+	if (isset($_POST['em_event_longitude'])) {
+		$event_longitude = em_sanitize_event_longitude(wp_unslash($_POST['em_event_longitude']));
+	}
+
+	if ('' !== $event_longitude) {
+		update_post_meta($post_id, EM_EVENT_LONGITUDE_META_KEY, $event_longitude);
+	} else {
+		delete_post_meta($post_id, EM_EVENT_LONGITUDE_META_KEY);
+	}
 }
 
 function em_sanitize_event_date($value) {
@@ -218,6 +300,36 @@ function em_sanitize_event_date($value) {
 	}
 
 	return $date->format('Y-m-d') === $value ? $value : '';
+}
+
+function em_sanitize_event_latitude($value) {
+	return em_sanitize_coordinate($value, -90, 90);
+}
+
+function em_sanitize_event_longitude($value) {
+	return em_sanitize_coordinate($value, -180, 180);
+}
+
+function em_sanitize_coordinate($value, $min, $max) {
+	if (! is_scalar($value)) {
+		return '';
+	}
+
+	$value = str_replace(',', '.', trim((string) $value));
+
+	if ('' === $value || ! is_numeric($value)) {
+		return '';
+	}
+
+	$number = (float) $value;
+
+	if ($number < $min || $number > $max) {
+		return '';
+	}
+
+	$formatted = rtrim(rtrim(sprintf('%.6F', $number), '0'), '.');
+
+	return '-0' === $formatted ? '0' : $formatted;
 }
 
 function em_get_today_in_site_timezone() {
@@ -262,28 +374,39 @@ function em_get_formatted_event_date($event_date) {
 	return wp_date('d.m.Y', $date->getTimestamp(), wp_timezone());
 }
 
-function em_get_map_embed_url($place) {
-	if ('' === $place) {
+function em_get_map_embed_url($map_query) {
+	if ('' === $map_query) {
 		return '';
 	}
 
-	return 'https://www.google.com/maps?q=' . rawurlencode($place) . '&z=14&output=embed';
+	return 'https://www.google.com/maps?q=' . rawurlencode($map_query) . '&z=14&output=embed';
 }
 
-function em_get_map_link_url($place) {
-	if ('' === $place) {
+function em_get_map_link_url($map_query) {
+	if ('' === $map_query) {
 		return '';
 	}
 
-	return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($place);
+	return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($map_query);
+}
+
+function em_get_map_query($event_place, $event_latitude, $event_longitude) {
+	if ('' !== $event_latitude && '' !== $event_longitude) {
+		return $event_latitude . ',' . $event_longitude;
+	}
+
+	return $event_place;
 }
 
 function em_render_single_event($post_id) {
-	$event_date     = (string) get_post_meta($post_id, EM_EVENT_DATE_META_KEY, true);
-	$event_place    = (string) get_post_meta($post_id, EM_EVENT_PLACE_META_KEY, true);
-	$formatted_date = em_get_formatted_event_date($event_date);
-	$map_embed_url  = em_get_map_embed_url($event_place);
-	$map_link_url   = em_get_map_link_url($event_place);
+	$event_date      = (string) get_post_meta($post_id, EM_EVENT_DATE_META_KEY, true);
+	$event_place     = (string) get_post_meta($post_id, EM_EVENT_PLACE_META_KEY, true);
+	$event_latitude  = (string) get_post_meta($post_id, EM_EVENT_LATITUDE_META_KEY, true);
+	$event_longitude = (string) get_post_meta($post_id, EM_EVENT_LONGITUDE_META_KEY, true);
+	$formatted_date  = em_get_formatted_event_date($event_date);
+	$map_query       = em_get_map_query($event_place, $event_latitude, $event_longitude);
+	$map_embed_url   = em_get_map_embed_url($map_query);
+	$map_link_url    = em_get_map_link_url($map_query);
 
 	ob_start();
 	?>
@@ -291,11 +414,11 @@ function em_render_single_event($post_id) {
 		<h3 class="em-event__title"><?php echo esc_html(get_the_title($post_id)); ?></h3>
 		<dl class="em-event__meta">
 			<div class="em-event__meta-row">
-				<dt><?php esc_html_e('Date', 'events-manager'); ?></dt>
+				<dt><?php esc_html_e('Дата', 'events-manager'); ?></dt>
 				<dd><?php echo esc_html($formatted_date); ?></dd>
 			</div>
 			<div class="em-event__meta-row">
-				<dt><?php esc_html_e('Place', 'events-manager'); ?></dt>
+				<dt><?php esc_html_e('Место', 'events-manager'); ?></dt>
 				<dd><?php echo esc_html($event_place); ?></dd>
 			</div>
 		</dl>
@@ -303,14 +426,14 @@ function em_render_single_event($post_id) {
 			<div class="em-event__map">
 				<iframe
 					src="<?php echo esc_url($map_embed_url); ?>"
-					title="<?php echo esc_attr(sprintf(__('Map for %s', 'events-manager'), get_the_title($post_id))); ?>"
+					title="<?php echo esc_attr(sprintf(__('Карта для %s', 'events-manager'), get_the_title($post_id))); ?>"
 					loading="lazy"
 					referrerpolicy="no-referrer-when-downgrade"
 					allowfullscreen
 				></iframe>
 				<p class="em-event__map-link">
 					<a href="<?php echo esc_url($map_link_url); ?>" target="_blank" rel="noopener noreferrer">
-						<?php esc_html_e('Open in Google Maps', 'events-manager'); ?>
+						<?php esc_html_e('Открыть в Google Maps', 'events-manager'); ?>
 					</a>
 				</p>
 			</div>
@@ -374,9 +497,11 @@ function em_enqueue_assets() {
 		$script_handle,
 		'window.EventsManagerConfig = ' . wp_json_encode(
 			array(
-				'action'  => EM_AJAX_ACTION,
-				'ajaxUrl' => admin_url('admin-ajax.php'),
-				'nonce'   => wp_create_nonce(EM_AJAX_NONCE_ACTION),
+				'action'      => EM_AJAX_ACTION,
+				'ajaxUrl'     => admin_url('admin-ajax.php'),
+				'nonce'       => wp_create_nonce(EM_AJAX_NONCE_ACTION),
+				'loadingText' => __('Загрузка...', 'events-manager'),
+				'errorText'   => __('Не удалось загрузить следующие события.', 'events-manager'),
 			)
 		) . ';',
 		'before'
@@ -392,12 +517,12 @@ function em_render_events_shortcode() {
 
 	ob_start();
 	?>
-	<div class="em-events" data-next-page="2">
+	<div class="em-events alignwide" data-next-page="2">
 		<div class="em-events__items">
 			<?php if ('' !== $rendered['html']) : ?>
 				<?php echo $rendered['html']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<?php else : ?>
-				<p class="em-events__empty"><?php esc_html_e('No upcoming events found.', 'events-manager'); ?></p>
+				<p class="em-events__empty"><?php esc_html_e('Ближайших событий пока нет.', 'events-manager'); ?></p>
 			<?php endif; ?>
 		</div>
 		<button
@@ -405,7 +530,7 @@ function em_render_events_shortcode() {
 			class="em-events__more"
 			<?php echo $rendered['has_more'] ? '' : 'hidden'; ?>
 		>
-			<?php esc_html_e('Show more', 'events-manager'); ?>
+			<?php esc_html_e('Показать ещё', 'events-manager'); ?>
 		</button>
 		<p class="em-events__status" aria-live="polite" hidden></p>
 	</div>
@@ -427,11 +552,10 @@ function em_ajax_load_events() {
 
 	wp_send_json_success(
 		array(
-			'html'      => $rendered['html'],
-			'hasMore'   => $rendered['has_more'],
-			'nextPage'  => $page + 1,
-			'isEmpty'   => '' === $rendered['html'],
-			'buttonText'=> __('Show more', 'events-manager'),
+			'html'     => $rendered['html'],
+			'hasMore'  => $rendered['has_more'],
+			'nextPage' => $page + 1,
+			'isEmpty'  => '' === $rendered['html'],
 		)
 	);
 }

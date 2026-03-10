@@ -44,7 +44,7 @@
       body.append('page', String(nextPage));
 
       button.disabled = true;
-      button.textContent = 'Loading...';
+      button.textContent = config.loadingText || defaultLabel;
       wrapper.classList.add('is-loading');
       setStatus(status);
 
@@ -76,7 +76,7 @@
           button.hidden = true;
         }
       } catch (error) {
-        setStatus(status, 'Could not load more events.');
+        setStatus(status, config.errorText || '');
       } finally {
         button.disabled = false;
         button.textContent = defaultLabel;
