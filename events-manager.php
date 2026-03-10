@@ -374,28 +374,34 @@ function em_get_formatted_event_date($event_date) {
 	return wp_date('d.m.Y', $date->getTimestamp(), wp_timezone());
 }
 
-function em_get_map_embed_url($map_query) {
-	if ('' === $map_query) {
+function em_has_coordinates($event_latitude, $event_longitude) {
+	return '' !== $event_latitude && '' !== $event_longitude;
+}
+
+function em_get_map_embed_url($event_place, $event_latitude, $event_longitude) {
+	if (em_has_coordinates($event_latitude, $event_longitude)) {
+		$coordinates = rawurlencode($event_latitude . ',' . $event_longitude);
+
+		return 'https://maps.google.com/maps?ll=' . $coordinates . '&q=' . $coordinates . '&z=14&hl=ru&output=embed';
+	}
+
+	if ('' === $event_place) {
 		return '';
 	}
 
-	return 'https://www.google.com/maps?q=' . rawurlencode($map_query) . '&z=14&output=embed';
+	return 'https://maps.google.com/maps?hl=ru&q=' . rawurlencode($event_place) . '&z=14&output=embed';
 }
 
-function em_get_map_link_url($map_query) {
-	if ('' === $map_query) {
+function em_get_map_link_url($event_place, $event_latitude, $event_longitude) {
+	if (em_has_coordinates($event_latitude, $event_longitude)) {
+		return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($event_latitude . ',' . $event_longitude);
+	}
+
+	if ('' === $event_place) {
 		return '';
 	}
 
-	return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($map_query);
-}
-
-function em_get_map_query($event_place, $event_latitude, $event_longitude) {
-	if ('' !== $event_latitude && '' !== $event_longitude) {
-		return $event_latitude . ',' . $event_longitude;
-	}
-
-	return $event_place;
+	return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($event_place);
 }
 
 function em_render_single_event($post_id) {
@@ -404,9 +410,8 @@ function em_render_single_event($post_id) {
 	$event_latitude  = (string) get_post_meta($post_id, EM_EVENT_LATITUDE_META_KEY, true);
 	$event_longitude = (string) get_post_meta($post_id, EM_EVENT_LONGITUDE_META_KEY, true);
 	$formatted_date  = em_get_formatted_event_date($event_date);
-	$map_query       = em_get_map_query($event_place, $event_latitude, $event_longitude);
-	$map_embed_url   = em_get_map_embed_url($map_query);
-	$map_link_url    = em_get_map_link_url($map_query);
+	$map_embed_url   = em_get_map_embed_url($event_place, $event_latitude, $event_longitude);
+	$map_link_url    = em_get_map_link_url($event_place, $event_latitude, $event_longitude);
 
 	ob_start();
 	?>
